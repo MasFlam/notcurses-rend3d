@@ -1,4 +1,3 @@
-#include <inttypes.h>
 #include <math.h>
 #include <notcurses/notcurses.h>
 
@@ -264,12 +263,12 @@ int
 main()
 {
 	init();
-	render_obj(&(struct obj) {
+	struct obj obj = {
 		.posx = 0,
 		.posy = 0,
 		.posz = 0,
-		.rotx = 0.1 * M_PI,
-		.roty = 0.1 * M_PI,
+		.rotx = 0,
+		.roty = 0,
 		.rotz = 0,
 		.vertcount = 1,
 		.vertices = (struct vertex[]){
@@ -293,8 +292,14 @@ main()
 			{{ -0.5,  0.5, -0.5 }, { -0.5,  0.5, 0.5 }},
 			{{ -0.5, -0.5, -0.5 }, { -0.5, -0.5, 0.5 }},
 		}
-	});
-	render();
+	};
+	while (1) {
+		render_obj(&obj);
+		render();
+		obj.rotx += 0.02 * M_PI;
+		obj.roty += 0.015 * M_PI;
+		obj.rotz += 0.01 * M_PI;
+	}
 	notcurses_getc_blocking(g.nc, NULL);
 	notcurses_stop(g.nc);
 	free(g.emptybuf);
