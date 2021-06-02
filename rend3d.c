@@ -158,6 +158,14 @@ void
 render_obj(const struct obj *o)
 {
 	// 1. Matrix preparation
+	// Projection matrix (orthographic, but preserving aspect ratio)
+	double ar = (double) g.wpx / (double) g.hpx;
+	mat_t projmat = {{
+		1/ar, 0, 0, 0,
+		0, 1, 0, 0,
+		0, 0, 0, 0,
+		0, 0, 0, 0,
+	}};
 	// Object translation matrix
 	mat_t Tobj = {{
 		1, 0, 0, o->posx,
@@ -196,10 +204,10 @@ render_obj(const struct obj *o)
 	// Multiply all the transformation matrices all vertices share into one
 	// transformation matrix. (matrix multiplication is associative)
 	mat_t transformation_mat = IDENTITY_MAT;
-	mul_mat_mat(&Rx, &transformation_mat, &transformation_mat);
-	mul_mat_mat(&Ry, &transformation_mat, &transformation_mat);
-	mul_mat_mat(&Rz, &transformation_mat, &transformation_mat);
 	mul_mat_mat(&Tobj, &transformation_mat, &transformation_mat);
+	mul_mat_mat(&Rz, &transformation_mat, &transformation_mat);
+	mul_mat_mat(&Ry, &transformation_mat, &transformation_mat);
+	mul_mat_mat(&Rx, &transformation_mat, &transformation_mat);
 	// 2. Actual rendering
 	// 2.1. Lone vertices
 	for (size_t i = 0; i < o->vertcount; ++i) {
@@ -208,7 +216,7 @@ render_obj(const struct obj *o)
 		mul_mat_vec(&transformation_mat, &v, &v);
 		// Project vertex by multiplying by the projection matrix
 		vec_t final;
-		mul_mat_vec(&ORTHO_MAT, &v, &final);
+		mul_mat_vec(&projmat, &v, &final);
 		// Finally fill in the pixel, converting the [-1, 1] normalized coordinates
 		// to screen coordinates, aka pixels.
 		double x = (final.x + 1.0)/2.0 * (g.wpx-1);
@@ -223,8 +231,8 @@ render_obj(const struct obj *o)
 		mul_mat_vec(&transformation_mat, &v0, &v0);
 		mul_mat_vec(&transformation_mat, &v1, &v1);
 		// Project edge ends
-		mul_mat_vec(&ORTHO_MAT, &v0, &v0);
-		mul_mat_vec(&ORTHO_MAT, &v1, &v1);
+		mul_mat_vec(&projmat, &v0, &v0);
+		mul_mat_vec(&projmat, &v1, &v1);
 		// Draw the line between the pixels where the final edges end up
 		double x0 = (v0.x + 1.0)/2.0 * (g.wpx - 1);
 		double y0 = (-v0.y + 1.0)/2.0 * (g.hpx - 1);
@@ -244,6 +252,7 @@ void
 set_pixel(int x, int y, double intensity)
 {
 	// Fill the pixel with an appropriate shade of grey
+	if (x < 0 || y < 0 || x >= g.wpx || y >= g.hpx) return;
 	int i = y*g.wpx*4 + x*4;
 	g.drawbuf[i + 0] = intensity * 255;
 	g.drawbuf[i + 1] = intensity * 255;
@@ -253,6 +262,7 @@ set_pixel(int x, int y, double intensity)
 void
 set_pixel_or_more(int x, int y, double intensity)
 {
+	if (x < 0 || y < 0 || x >= g.wpx || y >= g.hpx) return;
 	int i = y*g.wpx*4 + x*4;
 	if (g.drawbuf[i + 0] < intensity * 255) g.drawbuf[i + 0] = intensity * 255;
 	if (g.drawbuf[i + 1] < intensity * 255) g.drawbuf[i + 1] = intensity * 255;
@@ -263,9 +273,9 @@ int
 main()
 {
 	init();
-	struct obj obj = {
-		.posx = 0,
-		.posy = 0,
+	struct obj obj1 = {
+		.posx = 0.4,
+		.posy = -0.4,
 		.posz = 0,
 		.rotx = 0,
 		.roty = 0,
@@ -293,12 +303,20 @@ main()
 			{{ -0.5, -0.5, -0.5 }, { -0.5, -0.5, 0.5 }},
 		}
 	};
+	struct obj obj2 = obj1;
+	obj2.posx = -0.4;
+	obj2.posy = 0.4;
+	obj2.posz = 0.5;
 	while (1) {
-		render_obj(&obj);
+		render_obj(&obj1);
+		render_obj(&obj2);
 		render();
-		obj.rotx += 0.02 * M_PI;
-		obj.roty += 0.015 * M_PI;
-		obj.rotz += 0.01 * M_PI;
+		obj1.rotx += 0.02 * M_PI;
+		obj1.roty += 0.015 * M_PI;
+		obj1.rotz += 0.01 * M_PI;
+		obj2.rotx += 0.02 * M_PI;
+		obj2.roty += 0.015 * M_PI;
+		obj2.rotz += 0.01 * M_PI;
 	}
 	notcurses_getc_blocking(g.nc, NULL);
 	notcurses_stop(g.nc);
