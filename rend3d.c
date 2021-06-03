@@ -32,6 +32,7 @@ struct g {
 };
 
 static void draw_line(double x0, double y0, double x1, double y1);
+static int drawp_resize_cb(struct ncplane *drawp);
 static inline double fpart(double x);
 static void init();
 static void render();
@@ -102,6 +103,24 @@ draw_line(double x0, double y0, double x1, double y1)
 	}
 }
 
+int
+drawp_resize_cb(struct ncplane *drawp)
+{
+	ncplane_resize_maximize(drawp);
+	ncplane_pixelgeom(g.drawp, NULL, NULL, NULL, NULL, &g.hpx, &g.wpx);
+	ncplane_dim_yx(drawp, &g.termh, &g.termw);
+	g.emptybuf = realloc(g.emptybuf, g.wpx * g.hpx * 4);
+	g.drawbuf = realloc(g.drawbuf, g.wpx * g.hpx * 4);
+	for (int i = 0; i < g.wpx * g.hpx; ++i) {
+		g.emptybuf[4*i + 0] = 0;
+		g.emptybuf[4*i + 1] = 0;
+		g.emptybuf[4*i + 2] = 0;
+		g.emptybuf[4*i + 3] = 255;
+	}
+	memcpy(g.drawbuf, g.emptybuf, g.wpx * g.hpx * 4);
+	return 0;
+}
+
 double
 fpart(double x)
 {
@@ -122,11 +141,12 @@ init()
 	}
 	// We need this because Notcurses doesn't allow pixel blitting over the standard plane.
 	g.drawp = ncplane_create(g.stdp, &(struct ncplane_options) {
-		.x = 0, .y = 1,
-		.rows = g.termh - 1,
+		.x = 0, .y = 0,
+		.rows = g.termh,
 		.cols = g.termw
 	});
 	ncplane_pixelgeom(g.drawp, NULL, NULL, NULL, NULL, &g.hpx, &g.wpx);
+	ncplane_set_resizecb(g.drawp, drawp_resize_cb);
 	uint8_t *buf = malloc(g.wpx * g.hpx * 4);
 	for (int i = 0; i < g.wpx * g.hpx; ++i) {
 		buf[4*i + 0] = 0;
