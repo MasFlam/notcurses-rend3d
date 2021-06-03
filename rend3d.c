@@ -179,13 +179,22 @@ void
 render_obj(const struct obj *o)
 {
 	// 1. Matrix preparation
-	// Projection matrix (orthographic, but preserving aspect ratio)
+	// Projection matrix
 	double ar = (double) g.wpx / (double) g.hpx;
+	double near = 0.1;
+	double far = 0.9;
+	double fov = M_PI/4;
 	mat_t projmat = {{
-		1/ar, 0, 0, 0,
-		0, 1, 0, 0,
-		0, 0, 0, 0,
-		0, 0, 0, 0,
+		// Orthographic projection:
+		// 1/ar, 0, 0, 0,
+		// 0, 1, 0, 0,
+		// 0, 0, 0, 0,
+		// 0, 0, 0, 0,
+		// Perspective projection:
+		1/(tan(fov/2)*ar), 0, 0, 0,
+		0, 1/tan(fov/2), 0, 0,
+		0, 0, -(far+near)/(far-near), -2*near*far/(far-near),
+		0, 0, -1, 0,
 	}};
 	// Object translation matrix
 	mat_t Tobj = {{
@@ -246,6 +255,10 @@ render_obj(const struct obj *o)
 		// Project vertex by multiplying by the projection matrix
 		vec_t final;
 		mul_mat_vec(&projmat, &v, &final);
+		// An (x, y, z, w) vector really means by definition (x/w, y/w, z/w)
+		final.x /= final.w;
+		final.y /= final.w;
+		final.z /= final.w;
 		// Finally fill in the pixel, converting the [-1, 1] normalized coordinates
 		// to screen coordinates, aka pixels.
 		double x = (final.x + 1.0)/2.0 * (g.wpx-1);
@@ -262,6 +275,13 @@ render_obj(const struct obj *o)
 		// Project edge ends
 		mul_mat_vec(&projmat, &v0, &v0);
 		mul_mat_vec(&projmat, &v1, &v1);
+		// An (x, y, z, w) vector really means by definition (x/w, y/w, z/w)
+		v0.x /= v0.w;
+		v0.y /= v0.w;
+		v0.z /= v0.w;
+		v1.x /= v1.w;
+		v1.y /= v1.w;
+		v1.z /= v1.w;
 		// Draw the line between the pixels where the final edges end up
 		double x0 = (v0.x + 1.0)/2.0 * (g.wpx - 1);
 		double y0 = (-v0.y + 1.0)/2.0 * (g.hpx - 1);
@@ -303,15 +323,15 @@ main()
 {
 	init();
 	struct obj obj1 = {
-		.posx = 0.4,
-		.posy = -0.4,
-		.posz = 0,
+		.posx = 0,
+		.posy = 0,
+		.posz = -1,
 		.rotx = 0,
 		.roty = 0,
 		.rotz = 0,
-		.sclx = 0.5,
-		.scly = 0.5,
-		.sclz = 0.5,
+		.sclx = 0.2,
+		.scly = 0.2,
+		.sclz = 0.2,
 		.vertcount = 1,
 		.vertices = (struct vertex[]){
 			{ 0.7, 0.7, 0 },
@@ -335,20 +355,12 @@ main()
 			{{ -0.5, -0.5, -0.5 }, { -0.5, -0.5, 0.5 }},
 		}
 	};
-	struct obj obj2 = obj1;
-	obj2.posx = -0.4;
-	obj2.posy = 0.4;
-	obj2.posz = 0.5;
 	while (1) {
 		render_obj(&obj1);
-		render_obj(&obj2);
 		render();
 		obj1.rotx += 0.02 * M_PI;
 		obj1.roty += 0.015 * M_PI;
 		obj1.rotz += 0.01 * M_PI;
-		obj2.rotx += 0.02 * M_PI;
-		obj2.roty += 0.015 * M_PI;
-		obj2.rotz += 0.01 * M_PI;
 	}
 	notcurses_getc_blocking(g.nc, NULL);
 	notcurses_stop(g.nc);
