@@ -17,6 +17,7 @@ struct edge {
 struct obj {
 	double posx, posy, posz;
 	double rotx, roty, rotz;
+	double sclx, scly, sclz;
 	size_t vertcount;
 	struct vertex *vertices;
 	size_t edgecount;
@@ -221,6 +222,13 @@ render_obj(const struct obj *o)
 		0, 0, 1, 0,
 		0, 0, 0, 1,
 	}};
+	// Scale matrix
+	mat_t S = {{
+		o->sclx, 0, 0, 0,
+		0, o->scly, 0, 0,
+		0, 0, o->sclz, 0,
+		0, 0, 0, 1,
+	}};
 	// Multiply all the transformation matrices all vertices share into one
 	// transformation matrix. (matrix multiplication is associative)
 	mat_t transformation_mat = IDENTITY_MAT;
@@ -228,6 +236,7 @@ render_obj(const struct obj *o)
 	mul_mat_mat(&Rz, &transformation_mat, &transformation_mat);
 	mul_mat_mat(&Ry, &transformation_mat, &transformation_mat);
 	mul_mat_mat(&Rx, &transformation_mat, &transformation_mat);
+	mul_mat_mat(&S, &transformation_mat, &transformation_mat);
 	// 2. Actual rendering
 	// 2.1. Lone vertices
 	for (size_t i = 0; i < o->vertcount; ++i) {
@@ -300,6 +309,9 @@ main()
 		.rotx = 0,
 		.roty = 0,
 		.rotz = 0,
+		.sclx = 0.5,
+		.scly = 0.5,
+		.sclz = 0.5,
 		.vertcount = 1,
 		.vertices = (struct vertex[]){
 			{ 0.7, 0.7, 0 },
