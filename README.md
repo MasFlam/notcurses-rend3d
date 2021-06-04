@@ -8,4 +8,4 @@ possible to draw without compromising on resolution.
 
 # Building
 Make sure Notcurses is installed (on Debian it's `libnotcurses-dev`). Then run `make`
-to compile and link the `rend3d` executable.
+to compile and link the `rend3d-demo` executable.

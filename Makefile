@@ -2,7 +2,7 @@
 
 CFLAGS := -O3
 
-rend3d: main.o rend3d.o vecmat.o
+rend3d-demo: main.o rend3d.o vecmat.o
 	cc -o $@ $^ -lnotcurses-core -lm
 
 main.o: main.c rend3d.o
@@ -15,4 +15,4 @@ vecmat.o: vecmat.h vecmat.c
 	cc $(CFLAGS) -c -o $@ vecmat.c
 
 clean:
-	rm -f main.o vecmat.o rend3d.o rend3d
+	rm -f main.o vecmat.o rend3d.o rend3d-demo
