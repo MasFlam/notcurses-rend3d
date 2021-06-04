@@ -38,7 +38,7 @@ init()
 		.rows = termh,
 		.cols = termw
 	});
-	g.r3d = rend3d_create(drawp);
+	g.r3d = rend3d_create(drawp, NULL);
 }
 
 int

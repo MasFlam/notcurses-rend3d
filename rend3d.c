@@ -10,6 +10,7 @@
 #define SWAPDBL(a, b) do { double t_m_p = a; a = b; b = t_m_p; } while (0)
 
 struct rend3d {
+	struct rend3d_options opts;
 	struct notcurses *nc;
 	struct ncplane *drawp;
 	int w, h, wpx, hpx;
@@ -115,23 +116,31 @@ void
 render_obj(struct rend3d *r, const struct r3d_obj *o)
 {
 	// 1. Matrix preparation
-	// Projection matrix
 	double ar = (double) r->wpx / (double) r->hpx;
-	double near = 0.1;
-	double far = 0.9;
-	double fov = M_PI/4;
-	mat_t projmat = {{
-		// Orthographic projection:
-		// 1/ar, 0, 0, 0,
-		// 0, 1, 0, 0,
-		// 0, 0, 0, 0,
-		// 0, 0, 0, 0,
-		// Perspective projection:
-		1/(tan(fov/2)*ar), 0, 0, 0,
-		0, 1/tan(fov/2), 0, 0,
-		0, 0, -(far+near)/(far-near), -2*near*far/(far-near),
-		0, 0, -1, 0,
-	}};
+	// Projection matrix
+	mat_t projmat;
+	switch (r->opts.projtype) {
+	case REND3D_PROJTYPE_ORTHO: {
+		projmat = (mat_t) {{
+			1/ar, 0, 0, 0,
+			0, 1, 0, 0,
+			0, 0, 1, 0,
+			0, 0, 0, 1,
+		}};
+	} break;
+	case REND3D_PROJTYPE_PERSP: {
+		double near = r->opts.projopts.persp.near;
+		double far = r->opts.projopts.persp.far;
+		double fovx = r->opts.projopts.persp.fovx;
+		double fovy = r->opts.projopts.persp.fovy;
+		projmat = (mat_t) {{
+			1/(tan(fovx/2)*ar), 0, 0, 0,
+			0, 1/tan(fovy/2), 0, 0,
+			0, 0, -(far+near)/(far-near), -2*near*far/(far-near),
+			0, 0, -1, 0,
+		}};
+	} break;
+	}
 	// Object translation matrix
 	mat_t Tobj = {{
 		1, 0, 0, o->posx,
@@ -255,9 +264,20 @@ set_pixel_or_more(struct rend3d *r, int x, int y, double intensity)
 }
 
 struct rend3d *
-rend3d_create(struct ncplane *drawp)
+rend3d_create(struct ncplane *drawp, const struct rend3d_options *opts)
 {
+	struct rend3d_options defopts = {
+		.projtype = REND3D_PROJTYPE_PERSP,
+		.projopts.persp.fovx = M_PI / 4,
+		.projopts.persp.fovy = M_PI / 4,
+		.projopts.persp.near = 0.1,
+		.projopts.persp.far = 1
+	};
+	if (!opts) {
+		opts = &defopts;
+	}
 	struct rend3d *r = malloc(sizeof(struct rend3d));
+	memcpy(&r->opts, opts, sizeof(struct rend3d_options));
 	r->nc = ncplane_notcurses(drawp);
 	r->drawp = drawp;
 	r->objcount = 0;

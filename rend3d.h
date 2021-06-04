@@ -5,6 +5,21 @@
 
 struct rend3d;
 
+enum rend3d_projtype {
+	REND3D_PROJTYPE_ORTHO,
+	REND3D_PROJTYPE_PERSP,
+};
+
+struct rend3d_options {
+	enum rend3d_projtype projtype;
+	union {
+		struct {
+			double fovx, fovy;
+			double near, far;
+		} persp;
+	} projopts;
+};
+
 struct r3d_vertex {
 	double x, y, z;
 };
@@ -32,7 +47,7 @@ struct r3d_objref {
 #endif
 };
 
-struct rend3d *rend3d_create(struct ncplane *drawp);
+struct rend3d *rend3d_create(struct ncplane *drawp, const struct rend3d_options *opts);
 void rend3d_destroy(struct rend3d *r);
 
 struct r3d_objref *rend3d_add_object(struct rend3d *r, const struct r3d_obj *obj);
