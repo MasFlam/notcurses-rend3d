@@ -1,5 +1,5 @@
-#ifndef VECMAT_H
-#define VECMAT_H
+#ifndef REND3D_VECMAT_H
+#define REND3D_VECMAT_H
 
 #define IDENTITY_MAT ((mat_t) {{ \
 	1, 0, 0, 0, \

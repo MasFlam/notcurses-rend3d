@@ -1,51 +1,33 @@
+#define REND3D_INTERNAL
 #include <math.h>
+#include <string.h>
 #include <notcurses/notcurses.h>
-
 #include "vecmat.h"
+
+#include "rend3d.h"
 
 // Swap the doubles a with b (for the line drawing algo)
 #define SWAPDBL(a, b) do { double t_m_p = a; a = b; b = t_m_p; } while (0)
 
-struct vertex {
-	double x, y, z;
-};
-
-struct edge {
-	struct vertex a, b;
-};
-
-struct obj {
-	double posx, posy, posz;
-	double rotx, roty, rotz;
-	double sclx, scly, sclz;
-	size_t vertcount;
-	struct vertex *vertices;
-	size_t edgecount;
-	struct edge *edges;
-};
-
-struct g {
+struct rend3d {
 	struct notcurses *nc;
-	struct ncplane *stdp, *drawp;
-	int termw, termh;
-	int wpx, hpx;
+	struct ncplane *drawp;
+	int w, h, wpx, hpx;
 	uint8_t *emptybuf, *drawbuf;
+	int objcount;
+	struct r3d_objref *objs;
 };
 
-static void draw_line(double x0, double y0, double x1, double y1);
+static void draw_line(struct rend3d *r, double x0, double y0, double x1, double y1);
 static int drawp_resize_cb(struct ncplane *drawp);
 static inline double fpart(double x);
-static void init();
-static void render();
-static void render_obj(const struct obj *o);
+static inline void render_obj(struct rend3d *r, const struct r3d_obj *o);
 static inline double rfpart(double x);
-static inline void set_pixel(int x, int y, double intensity);
-static inline void set_pixel_or_more(int x, int y, double intensity);
-
-struct g g;
+static inline void set_pixel(struct rend3d *r, int x, int y, double intensity);
+static inline void set_pixel_or_more(struct rend3d *r, int x, int y, double intensity);
 
 void
-draw_line(double x0, double y0, double x1, double y1)
+draw_line(struct rend3d *r, double x0, double y0, double x1, double y1)
 {
 	// Use Wu's algorithm to draw a line
 	bool steep = fabs(y1 - y0) > fabs(x1 - x0); // ... > abs(i+1 - i)
@@ -68,11 +50,11 @@ draw_line(double x0, double y0, double x1, double y1)
 	int xpxl1 = xend;
 	int ypxl1 = floor(yend);
 	if (steep) {
-		set_pixel_or_more(ypxl1, xpxl1, rfpart(yend) * xgap);
-		set_pixel_or_more(ypxl1+1, xpxl1, fpart(yend) * xgap);
+		set_pixel_or_more(r, ypxl1, xpxl1, rfpart(yend) * xgap);
+		set_pixel_or_more(r, ypxl1+1, xpxl1, fpart(yend) * xgap);
 	} else {
-		set_pixel_or_more(xpxl1, ypxl1, rfpart(yend) * xgap);
-		set_pixel_or_more(xpxl1, ypxl1+1, fpart(yend) * xgap);
+		set_pixel_or_more(r, xpxl1, ypxl1, rfpart(yend) * xgap);
+		set_pixel_or_more(r, xpxl1, ypxl1+1, fpart(yend) * xgap);
 	}
 	double intery = yend + gradient;
 	// Second endpoint of the line
@@ -82,23 +64,23 @@ draw_line(double x0, double y0, double x1, double y1)
 	int xpxl2 = xend;
 	int ypxl2 = floor(yend);
 	if (steep) {
-		set_pixel_or_more(ypxl2, xpxl2, rfpart(yend) * xgap);
-		set_pixel_or_more(ypxl2+1, xpxl2, fpart(yend) * xgap);
+		set_pixel_or_more(r, ypxl2, xpxl2, rfpart(yend) * xgap);
+		set_pixel_or_more(r, ypxl2+1, xpxl2, fpart(yend) * xgap);
 	} else {
-		set_pixel_or_more(xpxl2, ypxl2, rfpart(yend) * xgap);
-		set_pixel_or_more(xpxl2, ypxl2+1, fpart(yend) * xgap);
+		set_pixel_or_more(r, xpxl2, ypxl2, rfpart(yend) * xgap);
+		set_pixel_or_more(r, xpxl2, ypxl2+1, fpart(yend) * xgap);
 	}
 	// Main loop
 	if (steep) {
 		for (int x = xpxl1 + 1; x <= xpxl2 - 1; ++x) {
-			set_pixel_or_more(floor(intery), x, rfpart(intery));
-			set_pixel_or_more(floor(intery)+1, x, fpart(intery));
+			set_pixel_or_more(r, floor(intery), x, rfpart(intery));
+			set_pixel_or_more(r, floor(intery)+1, x, fpart(intery));
 			intery += gradient;
 		}
 	} else {
 		for (int x = xpxl1 + 1; x <= xpxl2 - 1; ++x) {
-			set_pixel_or_more(x, floor(intery), rfpart(intery));
-			set_pixel_or_more(x, floor(intery)+1, fpart(intery));
+			set_pixel_or_more(r, x, floor(intery), rfpart(intery));
+			set_pixel_or_more(r, x, floor(intery)+1, fpart(intery));
 			intery += gradient;
 		}
 	}
@@ -107,18 +89,19 @@ draw_line(double x0, double y0, double x1, double y1)
 int
 drawp_resize_cb(struct ncplane *drawp)
 {
+	struct rend3d *r = ncplane_userptr(drawp);
 	ncplane_resize_maximize(drawp);
-	ncplane_pixelgeom(g.drawp, NULL, NULL, NULL, NULL, &g.hpx, &g.wpx);
-	ncplane_dim_yx(drawp, &g.termh, &g.termw);
-	g.emptybuf = realloc(g.emptybuf, g.wpx * g.hpx * 4);
-	g.drawbuf = realloc(g.drawbuf, g.wpx * g.hpx * 4);
-	for (int i = 0; i < g.wpx * g.hpx; ++i) {
-		g.emptybuf[4*i + 0] = 0;
-		g.emptybuf[4*i + 1] = 0;
-		g.emptybuf[4*i + 2] = 0;
-		g.emptybuf[4*i + 3] = 255;
+	ncplane_pixelgeom(drawp, NULL, NULL, NULL, NULL, &r->hpx, &r->wpx);
+	ncplane_dim_yx(drawp, &r->h, &r->w);
+	r->emptybuf = realloc(r->emptybuf, r->wpx * r->hpx * 4);
+	r->drawbuf = realloc(r->drawbuf, r->wpx * r->hpx * 4);
+	for (int i = 0; i < r->wpx * r->hpx; ++i) {
+		r->emptybuf[4*i + 0] = 0;
+		r->emptybuf[4*i + 1] = 0;
+		r->emptybuf[4*i + 2] = 0;
+		r->emptybuf[4*i + 3] = 255;
 	}
-	memcpy(g.drawbuf, g.emptybuf, g.wpx * g.hpx * 4);
+	memcpy(r->drawbuf, r->emptybuf, r->wpx * r->hpx * 4);
 	return 0;
 }
 
@@ -129,58 +112,11 @@ fpart(double x)
 }
 
 void
-init()
-{
-	g.nc = notcurses_core_init(&(struct notcurses_options) {
-		.flags = NCOPTION_SUPPRESS_BANNERS
-	}, stdout);
-	g.stdp = notcurses_stddim_yx(g.nc, &g.termh, &g.termw);
-	if (notcurses_check_pixel_support(g.nc) < 1) {
-		notcurses_stop(g.nc);
-		fputs("No pixel support!", stderr);
-		exit(2);
-	}
-	// We need this because Notcurses doesn't allow pixel blitting over the standard plane.
-	g.drawp = ncplane_create(g.stdp, &(struct ncplane_options) {
-		.x = 0, .y = 0,
-		.rows = g.termh,
-		.cols = g.termw
-	});
-	ncplane_pixelgeom(g.drawp, NULL, NULL, NULL, NULL, &g.hpx, &g.wpx);
-	ncplane_set_resizecb(g.drawp, drawp_resize_cb);
-	uint8_t *buf = malloc(g.wpx * g.hpx * 4);
-	for (int i = 0; i < g.wpx * g.hpx; ++i) {
-		buf[4*i + 0] = 0;
-		buf[4*i + 1] = 0;
-		buf[4*i + 2] = 0;
-		buf[4*i + 3] = 255;
-	}
-	g.emptybuf = buf;
-	g.drawbuf = malloc(g.wpx * g.hpx * 4);
-	memcpy(g.drawbuf, g.emptybuf, g.wpx * g.hpx * 4);
-}
-
-void
-render()
-{
-	struct ncvisual *ncv = ncvisual_from_rgba(g.drawbuf, g.hpx, g.wpx * 4, g.wpx);
-	ncvisual_render(g.nc, ncv, &(struct ncvisual_options) {
-		.n = g.drawp,
-		.x = 0, .y = 0,
-		.scaling = NCSCALE_NONE,
-		.blitter = NCBLIT_PIXEL
-	});
-	notcurses_render(g.nc);
-	ncvisual_destroy(ncv);
-	memcpy(g.drawbuf, g.emptybuf, g.wpx * g.hpx * 4);
-}
-
-void
-render_obj(const struct obj *o)
+render_obj(struct rend3d *r, const struct r3d_obj *o)
 {
 	// 1. Matrix preparation
 	// Projection matrix
-	double ar = (double) g.wpx / (double) g.hpx;
+	double ar = (double) r->wpx / (double) r->hpx;
 	double near = 0.1;
 	double far = 0.9;
 	double fov = M_PI/4;
@@ -261,9 +197,9 @@ render_obj(const struct obj *o)
 		final.z /= final.w;
 		// Finally fill in the pixel, converting the [-1, 1] normalized coordinates
 		// to screen coordinates, aka pixels.
-		double x = (final.x + 1.0)/2.0 * (g.wpx-1);
-		double y = (-final.y + 1.0)/2.0 * (g.hpx-1);
-		set_pixel(x, y, 1);
+		double x = (final.x + 1.0)/2.0 * (r->wpx-1);
+		double y = (-final.y + 1.0)/2.0 * (r->hpx-1);
+		set_pixel(r, x, y, 1);
 	}
 	// 2.2. Edges
 	for (size_t i = 0; i < o->edgecount; ++i) {
@@ -283,11 +219,11 @@ render_obj(const struct obj *o)
 		v1.y /= v1.w;
 		v1.z /= v1.w;
 		// Draw the line between the pixels where the final edges end up
-		double x0 = (v0.x + 1.0)/2.0 * (g.wpx - 1);
-		double y0 = (-v0.y + 1.0)/2.0 * (g.hpx - 1);
-		double x1 = (v1.x + 1.0)/2.0 * (g.wpx - 1);
-		double y1 = (-v1.y + 1.0)/2.0 * (g.hpx - 1);
-		draw_line(x0, y0, x1, y1);
+		double x0 = (v0.x + 1.0)/2.0 * (r->wpx - 1);
+		double y0 = (-v0.y + 1.0)/2.0 * (r->hpx - 1);
+		double x1 = (v1.x + 1.0)/2.0 * (r->wpx - 1);
+		double y1 = (-v1.y + 1.0)/2.0 * (r->hpx - 1);
+		draw_line(r, x0, y0, x1, y1);
 	}
 }
 
@@ -298,73 +234,97 @@ rfpart(double x)
 }
 
 void
-set_pixel(int x, int y, double intensity)
+set_pixel(struct rend3d *r, int x, int y, double intensity)
 {
 	// Fill the pixel with an appropriate shade of grey
-	if (x < 0 || y < 0 || x >= g.wpx || y >= g.hpx) return;
-	int i = y*g.wpx*4 + x*4;
-	g.drawbuf[i + 0] = intensity * 255;
-	g.drawbuf[i + 1] = intensity * 255;
-	g.drawbuf[i + 2] = intensity * 255;
+	if (x < 0 || y < 0 || x >= r->wpx || y >= r->hpx) return;
+	int i = y*r->wpx*4 + x*4;
+	r->drawbuf[i + 0] = intensity * 255;
+	r->drawbuf[i + 1] = intensity * 255;
+	r->drawbuf[i + 2] = intensity * 255;
 }
 
 void
-set_pixel_or_more(int x, int y, double intensity)
+set_pixel_or_more(struct rend3d *r, int x, int y, double intensity)
 {
-	if (x < 0 || y < 0 || x >= g.wpx || y >= g.hpx) return;
-	int i = y*g.wpx*4 + x*4;
-	if (g.drawbuf[i + 0] < intensity * 255) g.drawbuf[i + 0] = intensity * 255;
-	if (g.drawbuf[i + 1] < intensity * 255) g.drawbuf[i + 1] = intensity * 255;
-	if (g.drawbuf[i + 2] < intensity * 255) g.drawbuf[i + 2] = intensity * 255;
+	if (x < 0 || y < 0 || x >= r->wpx || y >= r->hpx) return;
+	int i = y*r->wpx*4 + x*4;
+	if (r->drawbuf[i + 0] < intensity * 255) r->drawbuf[i + 0] = intensity * 255;
+	if (r->drawbuf[i + 1] < intensity * 255) r->drawbuf[i + 1] = intensity * 255;
+	if (r->drawbuf[i + 2] < intensity * 255) r->drawbuf[i + 2] = intensity * 255;
 }
 
-int
-main()
+struct rend3d *
+rend3d_create(struct ncplane *drawp)
 {
-	init();
-	struct obj obj1 = {
-		.posx = 0,
-		.posy = 0,
-		.posz = -1,
-		.rotx = 0,
-		.roty = 0,
-		.rotz = 0,
-		.sclx = 0.2,
-		.scly = 0.2,
-		.sclz = 0.2,
-		.vertcount = 1,
-		.vertices = (struct vertex[]){
-			{ 0.7, 0.7, 0 },
-		},
-		.edgecount = 12,
-		.edges = (struct edge[]) {
-			// Front face rim
-			{{ -0.5, -0.5, 0.5 }, { -0.5,  0.5, 0.5 }},
-			{{ -0.5,  0.5, 0.5 }, {  0.5,  0.5, 0.5 }},
-			{{  0.5,  0.5, 0.5 }, {  0.5, -0.5, 0.5 }},
-			{{  0.5, -0.5, 0.5 }, { -0.5, -0.5, 0.5 }},
-			// Back face rim
-			{{ -0.5, -0.5, -0.5 }, { -0.5,  0.5, -0.5 }},
-			{{ -0.5,  0.5, -0.5 }, {  0.5,  0.5, -0.5 }},
-			{{  0.5,  0.5, -0.5 }, {  0.5, -0.5, -0.5 }},
-			{{  0.5, -0.5, -0.5 }, { -0.5, -0.5, -0.5 }},
-			// Side edges
-			{{  0.5,  0.5, -0.5 }, {  0.5,  0.5, 0.5 }},
-			{{  0.5, -0.5, -0.5 }, {  0.5, -0.5, 0.5 }},
-			{{ -0.5,  0.5, -0.5 }, { -0.5,  0.5, 0.5 }},
-			{{ -0.5, -0.5, -0.5 }, { -0.5, -0.5, 0.5 }},
-		}
-	};
-	while (1) {
-		render_obj(&obj1);
-		render();
-		obj1.rotx += 0.02 * M_PI;
-		obj1.roty += 0.015 * M_PI;
-		obj1.rotz += 0.01 * M_PI;
+	struct rend3d *r = malloc(sizeof(struct rend3d));
+	r->nc = ncplane_notcurses(drawp);
+	r->drawp = drawp;
+	r->objcount = 0;
+	r->objs = NULL;
+	ncplane_set_userptr(drawp, r);
+	ncplane_dim_yx(drawp, &r->h, &r->w);
+	ncplane_pixelgeom(r->drawp, NULL, NULL, NULL, NULL, &r->hpx, &r->wpx);
+	ncplane_set_resizecb(r->drawp, drawp_resize_cb);
+	uint8_t *buf = malloc(r->wpx * r->hpx * 4);
+	for (int i = 0; i < r->wpx * r->hpx; ++i) {
+		buf[4*i + 0] = 0;
+		buf[4*i + 1] = 0;
+		buf[4*i + 2] = 0;
+		buf[4*i + 3] = 255;
 	}
-	notcurses_getc_blocking(g.nc, NULL);
-	notcurses_stop(g.nc);
-	free(g.emptybuf);
-	free(g.drawbuf);
-	return 0;
+	r->emptybuf = buf;
+	r->drawbuf = malloc(r->wpx * r->hpx * 4);
+	memcpy(r->drawbuf, r->emptybuf, r->wpx * r->hpx * 4);
+	return r;
+}
+
+void
+rend3d_destroy(struct rend3d *r)
+{
+	if (!r) return;
+	free(r->emptybuf);
+	free(r->drawbuf);
+	ncplane_destroy(r->drawp);
+	free(r);
+}
+
+struct r3d_objref *
+rend3d_add_object(struct rend3d *r, const struct r3d_obj *obj)
+{
+	struct r3d_objref *objref = malloc(sizeof(struct r3d_objref));
+	if (r->objcount == 0) {
+		r->objs = objref;
+		objref->next = NULL;
+	} else {
+		struct r3d_objref *rf = r->objs;
+		r->objs = objref;
+		objref->next = rf;
+	}
+	++r->objcount;
+	memcpy(&objref->obj, obj, sizeof(struct r3d_obj));
+	objref->obj.vertices = malloc(obj->vertcount * sizeof(struct r3d_vertex));
+	objref->obj.edges = malloc(obj->edgecount * sizeof(struct r3d_edge));
+	memcpy(objref->obj.vertices, obj->vertices, obj->vertcount * sizeof(struct r3d_vertex));
+	memcpy(objref->obj.edges, obj->edges, obj->edgecount * sizeof(struct r3d_edge));
+	return objref;
+}
+
+void
+rend3d_render(struct rend3d *r)
+{
+	struct r3d_objref *ref = r->objs;
+	while (ref) {
+		render_obj(r, &ref->obj);
+		ref = ref->next;
+	}
+	struct ncvisual *ncv = ncvisual_from_rgba(r->drawbuf, r->hpx, r->wpx * 4, r->wpx);
+	ncvisual_render(r->nc, ncv, &(struct ncvisual_options) {
+		.n = r->drawp,
+		.x = 0, .y = 0,
+		.scaling = NCSCALE_NONE,
+		.blitter = NCBLIT_PIXEL
+	});
+	ncvisual_destroy(ncv);
+	memcpy(r->drawbuf, r->emptybuf, r->wpx * r->hpx * 4);
 }
