@@ -283,6 +283,12 @@ void
 rend3d_destroy(struct rend3d *r)
 {
 	if (!r) return;
+	struct r3d_objref *tmp, *ref = r->objs;
+	while (ref) {
+		tmp = ref->next;
+		free(ref);
+		ref = tmp;
+	}
 	free(r->emptybuf);
 	free(r->drawbuf);
 	ncplane_destroy(r->drawp);
