@@ -22,7 +22,7 @@ struct rend3d {
 static void draw_line(struct rend3d *r, double x0, double y0, double x1, double y1);
 static int drawp_resize_cb(struct ncplane *drawp);
 static inline double fpart(double x);
-static inline void render_obj(struct rend3d *r, const struct r3d_obj *o);
+static inline void render_obj(struct rend3d *r, const struct r3d_obj *o, const mat_t *projmat);
 static inline double rfpart(double x);
 static inline void set_pixel(struct rend3d *r, int x, int y, double intensity);
 static inline void set_pixel_or_more(struct rend3d *r, int x, int y, double intensity);
@@ -113,34 +113,9 @@ fpart(double x)
 }
 
 void
-render_obj(struct rend3d *r, const struct r3d_obj *o)
+render_obj(struct rend3d *r, const struct r3d_obj *o, const mat_t *projmat)
 {
 	// 1. Matrix preparation
-	double ar = (double) r->wpx / (double) r->hpx;
-	// Projection matrix
-	mat_t projmat;
-	switch (r->opts.projtype) {
-	case REND3D_PROJTYPE_ORTHO: {
-		projmat = (mat_t) {{
-			1/ar, 0, 0, 0,
-			0, 1, 0, 0,
-			0, 0, 1, 0,
-			0, 0, 0, 1,
-		}};
-	} break;
-	case REND3D_PROJTYPE_PERSP: {
-		double near = r->opts.projopts.persp.near;
-		double far = r->opts.projopts.persp.far;
-		double fovx = r->opts.projopts.persp.fovx;
-		double fovy = r->opts.projopts.persp.fovy;
-		projmat = (mat_t) {{
-			1/(tan(fovx/2)*ar), 0, 0, 0,
-			0, 1/tan(fovy/2), 0, 0,
-			0, 0, -(far+near)/(far-near), -2*near*far/(far-near),
-			0, 0, -1, 0,
-		}};
-	} break;
-	}
 	// Object translation matrix
 	mat_t Tobj = {{
 		1, 0, 0, o->posx,
@@ -199,7 +174,7 @@ render_obj(struct rend3d *r, const struct r3d_obj *o)
 		mul_mat_vec(&transformation_mat, &v, &v);
 		// Project vertex by multiplying by the projection matrix
 		vec_t final;
-		mul_mat_vec(&projmat, &v, &final);
+		mul_mat_vec(projmat, &v, &final);
 		// An (x, y, z, w) vector really means by definition (x/w, y/w, z/w)
 		final.x /= final.w;
 		final.y /= final.w;
@@ -218,8 +193,8 @@ render_obj(struct rend3d *r, const struct r3d_obj *o)
 		mul_mat_vec(&transformation_mat, &v0, &v0);
 		mul_mat_vec(&transformation_mat, &v1, &v1);
 		// Project edge ends
-		mul_mat_vec(&projmat, &v0, &v0);
-		mul_mat_vec(&projmat, &v1, &v1);
+		mul_mat_vec(projmat, &v0, &v0);
+		mul_mat_vec(projmat, &v1, &v1);
 		// An (x, y, z, w) vector really means by definition (x/w, y/w, z/w)
 		v0.x /= v0.w;
 		v0.y /= v0.w;
@@ -339,9 +314,33 @@ rend3d_add_object(struct rend3d *r, const struct r3d_obj *obj)
 void
 rend3d_render(struct rend3d *r)
 {
+	double ar = (double) r->wpx / (double) r->hpx;
+	mat_t projmat;
+	switch (r->opts.projtype) {
+	case REND3D_PROJTYPE_ORTHO: {
+		projmat = (mat_t) {{
+			1/ar, 0, 0, 0,
+			0, 1, 0, 0,
+			0, 0, 1, 0,
+			0, 0, 0, 1,
+		}};
+	} break;
+	case REND3D_PROJTYPE_PERSP: {
+		double near = r->opts.projopts.persp.near;
+		double far = r->opts.projopts.persp.far;
+		double fovx = r->opts.projopts.persp.fovx;
+		double fovy = r->opts.projopts.persp.fovy;
+		projmat = (mat_t) {{
+			1/(tan(fovx/2)*ar), 0, 0, 0,
+			0, 1/tan(fovy/2), 0, 0,
+			0, 0, -(far+near)/(far-near), -2*near*far/(far-near),
+			0, 0, -1, 0,
+		}};
+	} break;
+	}
 	struct r3d_objref *ref = r->objs;
 	while (ref) {
-		render_obj(r, &ref->obj);
+		render_obj(r, &ref->obj, &projmat);
 		ref = ref->next;
 	}
 	struct ncvisual *ncv = ncvisual_from_rgba(r->drawbuf, r->hpx, r->wpx * 4, r->wpx);
