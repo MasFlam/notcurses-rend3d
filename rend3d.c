@@ -336,6 +336,12 @@ rend3d_destroy(struct rend3d *r)
 	free(r);
 }
 
+int
+rend3d_add_objcount(struct rend3d *r)
+{
+	return r->objcount;
+}
+
 struct r3d_objref *
 rend3d_add_object(struct rend3d *r, const struct r3d_obj *obj)
 {
@@ -355,6 +361,18 @@ rend3d_add_object(struct rend3d *r, const struct r3d_obj *obj)
 	memcpy(objref->obj.vertices, obj->vertices, obj->vertcount * sizeof(struct r3d_vertex));
 	memcpy(objref->obj.edges, obj->edges, obj->edgecount * sizeof(struct r3d_edge));
 	return objref;
+}
+
+struct r3d_objref *
+rend3d_get_first_object(struct rend3d *r)
+{
+	return r->objs;
+}
+
+struct r3d_objref *
+rend3d_get_next_object(const struct r3d_objref *objref)
+{
+	return objref->next;
 }
 
 void

@@ -67,7 +67,10 @@ struct r3d_objref {
 struct rend3d *rend3d_create(struct ncplane *drawp, const struct rend3d_options *opts);
 void rend3d_destroy(struct rend3d *r);
 
+int rend3d_add_objcount(struct rend3d *r);
 struct r3d_objref *rend3d_add_object(struct rend3d *r, const struct r3d_obj *obj);
+struct r3d_objref *rend3d_get_first_object(struct rend3d *r);
+struct r3d_objref *rend3d_get_next_object(const struct r3d_objref *objref);
 
 void rend3d_cam_get_pos(struct rend3d *r, double *camx, double *camy, double *camz);
 void rend3d_cam_set_pos(struct rend3d *r, double camx, double camy, double camz);
