@@ -132,9 +132,8 @@ fpart(double x)
 void
 render_obj(struct rend3d *r, const struct r3d_obj *o, const mat_t *projmat)
 {
-	// 1. Matrix preparation
-	// Object translation matrix
-	mat_t Tobj = {{
+	// Prepare transformation matrices
+	mat_t obj_translation = {{
 		1, 0, 0, o->posx,
 		0, 1, 0, o->posy,
 		0, 0, 1, o->posz,
@@ -143,87 +142,73 @@ render_obj(struct rend3d *r, const struct r3d_obj *o, const mat_t *projmat)
 	double s, c;
 	c = cos(o->rotx);
 	s = sin(o->rotx);
-	// X axe rotation matrix
-	mat_t Rx = {{
-		1, 0, 0, 0,
+	mat_t rotation_x = {
+		1, 0,  0, 0,
 		0, c, -s, 0,
-		0, s, c, 0,
-		0, 0, 0, 1,
-	}};
+		0, s,  c, 0,
+		0, 0,  0, 1,
+	};
 	c = cos(o->roty);
 	s = sin(o->roty);
-	// Y axe rotation matrix
-	mat_t Ry = {{
-		c, 0, s, 0,
-		0, 1, 0, 0,
+	mat_t rotation_y = {{
+		 c, 0, s, 0,
+		 0, 1, 0, 0,
 		-s, 0, c, 0,
-		0, 0, 0, 1,
+		 0, 0, 0, 1,
 	}};
 	c = cos(o->rotz);
 	s = sin(o->rotz);
-	// Z axe rotation matrix
-	mat_t Rz = {{
+	mat_t rotation_z = {{
 		c, -s, 0, 0,
-		s, c, 0, 0,
-		0, 0, 1, 0,
-		0, 0, 0, 1,
+		s,  c, 0, 0,
+		0,  0, 1, 0,
+		0,  0, 0, 1,
 	}};
-	// Scale matrix
-	mat_t S = {{
-		o->sclx, 0, 0, 0,
-		0, o->scly, 0, 0,
-		0, 0, o->sclz, 0,
-		0, 0, 0, 1,
+	mat_t scalemat = {{
+		o->sclx, 0,       0,       0,
+		0,       o->scly, 0,       0,
+		0,       0,       o->sclz, 0,
+		0,       0,       0,       1,
 	}};
-	// Multiply all the transformation matrices all vertices share into one
-	// transformation matrix. (matrix multiplication is associative)
-	mat_t transformation_mat = IDENTITY_MAT;
-	mul_mat_mat(&Tobj, &transformation_mat, &transformation_mat);
-	mul_mat_mat(&Rz, &transformation_mat, &transformation_mat);
-	mul_mat_mat(&Ry, &transformation_mat, &transformation_mat);
-	mul_mat_mat(&Rx, &transformation_mat, &transformation_mat);
-	mul_mat_mat(&S, &transformation_mat, &transformation_mat);
-	// 2. Actual rendering
-	// 2.1. Lone vertices
+	
+	// Combine transformations and projection into a single matrix
+	mat_t transformation_and_proj_mat = IDENTITY_MAT;
+	mul_mat_mat(projmat, &transformation_and_proj_mat, &transformation_and_proj_mat);
+	mul_mat_mat(&obj_translation, &transformation_and_proj_mat, &transformation_and_proj_mat);
+	mul_mat_mat(&rotation_z, &transformation_and_proj_mat, &transformation_and_proj_mat);
+	mul_mat_mat(&rotation_y, &transformation_and_proj_mat, &transformation_and_proj_mat);
+	mul_mat_mat(&rotation_x, &transformation_and_proj_mat, &transformation_and_proj_mat);
+	mul_mat_mat(&scalemat, &transformation_and_proj_mat, &transformation_and_proj_mat);
+	
 	for (size_t i = 0; i < o->vertcount; ++i) {
-		// Transform vertex
-		vec_t v = { o->vertices[i].x, o->vertices[i].y, o->vertices[i].z, 1 };
-		mul_mat_vec(&transformation_mat, &v, &v);
-		// Project vertex by multiplying by the projection matrix
-		vec_t final;
-		mul_mat_vec(projmat, &v, &final);
-		// An (x, y, z, w) vector really means by definition (x/w, y/w, z/w)
-		final.x /= final.w;
-		final.y /= final.w;
-		final.z /= final.w;
-		// Finally fill in the pixel, converting the [-1, 1] normalized coordinates
-		// to screen coordinates, aka pixels.
-		double x = (final.x + 1.0)/2.0 * (r->wpx-1);
-		double y = (-final.y + 1.0)/2.0 * (r->hpx-1);
+		vec_t v = { o->vertices[i].x, o->vertices[i].y, o->vertices[i].z, .w = 1 };
+		mul_mat_vec(&transformation_and_proj_mat, &v, &v);
+		v.x /= v.w;
+		v.y /= v.w;
+		v.z /= v.w;
+		
+		double x = ( v.x + 1.0) / 2.0 * (r->wpx-1);
+		double y = (-v.y + 1.0) / 2.0 * (r->hpx-1);
 		set_pixel(r, x, y, 1);
 	}
-	// 2.2. Edges
+	
 	for (size_t i = 0; i < o->edgecount; ++i) {
-		// Transform edge ends
-		vec_t v0 = { o->edges[i].a.x, o->edges[i].a.y, o->edges[i].a.z, 1 };
-		vec_t v1 = { o->edges[i].b.x, o->edges[i].b.y, o->edges[i].b.z, 1 };
-		mul_mat_vec(&transformation_mat, &v0, &v0);
-		mul_mat_vec(&transformation_mat, &v1, &v1);
-		// Project edge ends
-		mul_mat_vec(projmat, &v0, &v0);
-		mul_mat_vec(projmat, &v1, &v1);
-		// An (x, y, z, w) vector really means by definition (x/w, y/w, z/w)
+		vec_t v0 = { o->edges[i].a.x, o->edges[i].a.y, o->edges[i].a.z, .w = 1 };
+		mul_mat_vec(&transformation_and_proj_mat, &v0, &v0);
 		v0.x /= v0.w;
 		v0.y /= v0.w;
 		v0.z /= v0.w;
+		
+		vec_t v1 = { o->edges[i].b.x, o->edges[i].b.y, o->edges[i].b.z, .w = 1 };
+		mul_mat_vec(&transformation_and_proj_mat, &v1, &v1);
 		v1.x /= v1.w;
 		v1.y /= v1.w;
 		v1.z /= v1.w;
-		// Draw the line between the pixels where the final edges end up
-		double x0 = (v0.x + 1.0)/2.0 * (r->wpx - 1);
-		double y0 = (-v0.y + 1.0)/2.0 * (r->hpx - 1);
-		double x1 = (v1.x + 1.0)/2.0 * (r->wpx - 1);
-		double y1 = (-v1.y + 1.0)/2.0 * (r->hpx - 1);
+		
+		double x0 = ( v0.x + 1.0) / 2.0 * (r->wpx-1);
+		double y0 = (-v0.y + 1.0) / 2.0 * (r->hpx-1);
+		double x1 = ( v1.x + 1.0) / 2.0 * (r->wpx-1);
+		double y1 = (-v1.y + 1.0) / 2.0 * (r->hpx-1);
 		draw_line(r, x0, y0, x1, y1);
 	}
 }
