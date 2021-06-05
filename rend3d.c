@@ -173,19 +173,23 @@ render_obj(struct rend3d *r, const struct r3d_obj *o, const mat_t *projmat, cons
 		0,       0,       0,       1,
 	}};
 	
-	// Combine transformations and projection into a single matrix
-	mat_t transformation_and_proj_mat = IDENTITY_MAT;
-	mul_mat_mat(projmat, &transformation_and_proj_mat, &transformation_and_proj_mat);
-	mul_mat_mat(viewmat, &transformation_and_proj_mat, &transformation_and_proj_mat);
-	mul_mat_mat(&obj_translation, &transformation_and_proj_mat, &transformation_and_proj_mat);
-	mul_mat_mat(&rotation_z, &transformation_and_proj_mat, &transformation_and_proj_mat);
-	mul_mat_mat(&rotation_y, &transformation_and_proj_mat, &transformation_and_proj_mat);
-	mul_mat_mat(&rotation_x, &transformation_and_proj_mat, &transformation_and_proj_mat);
-	mul_mat_mat(&scalemat, &transformation_and_proj_mat, &transformation_and_proj_mat);
+	// Combine transformations into one matrix called the model matrix
+	mat_t modelmat = IDENTITY_MAT;
+	mul_mat_mat(&obj_translation, &modelmat, &modelmat);
+	mul_mat_mat(&rotation_z, &modelmat, &modelmat);
+	mul_mat_mat(&rotation_y, &modelmat, &modelmat);
+	mul_mat_mat(&rotation_x, &modelmat, &modelmat);
+	mul_mat_mat(&scalemat, &modelmat, &modelmat);
+	
+	// Combine Model, View and Perspective into one matrix
+	mat_t mvp_mat = IDENTITY_MAT;
+	mul_mat_mat(projmat, &mvp_mat, &mvp_mat);
+	mul_mat_mat(viewmat, &mvp_mat, &mvp_mat);
+	mul_mat_mat(&modelmat, &mvp_mat, &mvp_mat);
 	
 	for (size_t i = 0; i < o->vertcount; ++i) {
 		vec_t v = { o->vertices[i].x, o->vertices[i].y, o->vertices[i].z, .w = 1 };
-		mul_mat_vec(&transformation_and_proj_mat, &v, &v);
+		mul_mat_vec(&mvp_mat, &v, &v);
 		
 		if (r->opts.projtype == REND3D_PROJTYPE_PERSP) {
 			// Clip on the Z axe
@@ -205,10 +209,10 @@ render_obj(struct rend3d *r, const struct r3d_obj *o, const mat_t *projmat, cons
 	
 	for (size_t i = 0; i < o->edgecount; ++i) {
 		vec_t v0 = { o->edges[i].a.x, o->edges[i].a.y, o->edges[i].a.z, .w = 1 };
-		mul_mat_vec(&transformation_and_proj_mat, &v0, &v0);
+		mul_mat_vec(&mvp_mat, &v0, &v0);
 		
 		vec_t v1 = { o->edges[i].b.x, o->edges[i].b.y, o->edges[i].b.z, .w = 1 };
-		mul_mat_vec(&transformation_and_proj_mat, &v1, &v1);
+		mul_mat_vec(&mvp_mat, &v1, &v1);
 		
 		if (r->opts.projtype == REND3D_PROJTYPE_PERSP) {
 			// Clip on the Z axe
@@ -356,7 +360,9 @@ rend3d_add_object(struct rend3d *r, const struct r3d_obj *obj)
 void
 rend3d_render(struct rend3d *r)
 {
-	double ar = (double) r->wpx / (double) r->hpx;
+	double ar = (double) r->wpx / (double) r->hpx; // aspect ratio
+	
+	// Prepare projection matrix
 	mat_t projmat;
 	switch (r->opts.projtype) {
 	case REND3D_PROJTYPE_ORTHO: {
@@ -414,6 +420,7 @@ rend3d_render(struct rend3d *r)
 		0,  0, 0, 1,
 	}};
 	
+	// Combine camera transformations
 	mat_t viewmat = IDENTITY_MAT;
 	mul_mat_mat(&viewmat_rotx, &viewmat, &viewmat);
 	mul_mat_mat(&viewmat_roty, &viewmat, &viewmat);
@@ -425,6 +432,7 @@ rend3d_render(struct rend3d *r)
 		render_obj(r, &ref->obj, &projmat, &viewmat);
 		ref = ref->next;
 	}
+	
 	struct ncvisual *ncv = ncvisual_from_rgba(r->drawbuf, r->hpx, r->wpx * 4, r->wpx);
 	ncvisual_render(r->nc, ncv, &(struct ncvisual_options) {
 		.n = r->drawp,
