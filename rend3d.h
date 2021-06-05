@@ -75,6 +75,15 @@ void rend3d_cam_set_pos_x(struct rend3d *r, double camx);
 void rend3d_cam_set_pos_y(struct rend3d *r, double camy);
 void rend3d_cam_set_pos_z(struct rend3d *r, double camz);
 
+void rend3d_cam_get_rot(struct rend3d *r, double *camrx, double *camry, double *camrz);
+void rend3d_cam_set_rot(struct rend3d *r, double camrx, double camry, double camrz);
+void rend3d_cam_set_rot_x(struct rend3d *r, double camrx);
+void rend3d_cam_set_rot_y(struct rend3d *r, double camry);
+void rend3d_cam_set_rot_z(struct rend3d *r, double camrz);
+
+void rend3d_cam_move(struct rend3d *r, double x, double y, double z);
+void rend3d_cam_rotate(struct rend3d *r, double rx, double ry, double rz);
+
 void rend3d_render(struct rend3d *r);
 
 #endif

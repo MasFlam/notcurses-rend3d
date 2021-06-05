@@ -360,9 +360,9 @@ rend3d_add_object(struct rend3d *r, const struct r3d_obj *obj)
 void
 rend3d_cam_get_pos(struct rend3d *r, double *camx, double *camy, double *camz)
 {
-	*camx = r->camx;
-	*camy = r->camy;
-	*camz = r->camz;
+	if (camx) *camx = r->camx;
+	if (camy) *camy = r->camy;
+	if (camz) *camz = r->camz;
 }
 
 void
@@ -389,6 +389,56 @@ void
 rend3d_cam_set_pos_z(struct rend3d *r, double camz)
 {
 	r->camz = camz;
+}
+
+void
+rend3d_cam_get_rot(struct rend3d *r, double *camrx, double *camry, double *camrz)
+{
+	if (camrx) *camrx = r->camrx;
+	if (camry) *camry = r->camry;
+	if (camrz) *camrz = r->camrz;
+}
+
+void
+rend3d_cam_set_rot(struct rend3d *r, double camrx, double camry, double camrz)
+{
+	r->camrx = camrx;
+	r->camry = camry;
+	r->camrz = camrz;
+}
+
+void
+rend3d_cam_set_rot_x(struct rend3d *r, double camrx)
+{
+	r->camrx = camrx;
+}
+
+void
+rend3d_cam_set_rot_y(struct rend3d *r, double camry)
+{
+	r->camry = camry;
+}
+
+void
+rend3d_cam_set_rot_z(struct rend3d *r, double camrz)
+{
+	r->camrz = camrz;
+}
+
+void
+rend3d_cam_move(struct rend3d *r, double x, double y, double z)
+{
+	r->camx += x;
+	r->camy += y;
+	r->camz += z;
+}
+
+void
+rend3d_cam_rotate(struct rend3d *r, double rx, double ry, double rz)
+{
+	r->camrx += rx;
+	r->camry += ry;
+	r->camrz += rz;
 }
 
 void
