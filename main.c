@@ -65,7 +65,7 @@ main()
 	struct r3d_obj obj = {
 		.posx = 0,
 		.posy = 0,
-		.posz = -1,
+		.posz = 0,
 		.rotx = 0,
 		.roty = 0,
 		.rotz = 0,
@@ -95,13 +95,34 @@ main()
 			{{ -0.5, -0.5, -0.5 }, { -0.5, -0.5, 0.5 }},
 		}
 	};
-	struct r3d_objref *ref = rend3d_add_object(g.r3d, &obj);
+	
+	static const int N = 3;
+	for (int x = -N; x <= N; ++x) {
+		obj.posx = x;
+		for (int y = -N; y <= N; ++y) {
+			obj.posy = y;
+			for (int z = -N; z <= N; ++z) {
+				obj.posz = z;
+				rend3d_add_object(g.r3d, &obj);
+			}
+		}
+	}
+	
+	rend3d_cam_move(g.r3d, 0.3, 0.4, 0.5);
+	
 	while (1) {
 		rend3d_render(g.r3d);
 		notcurses_render(g.nc);
-		ref->obj.rotx += 0.02 * M_PI;
-		ref->obj.roty += 0.015 * M_PI;
-		ref->obj.rotz += 0.01 * M_PI;
+		int i = 0;
+		struct r3d_objref *ref = rend3d_get_first_object(g.r3d);
+		while (ref) {
+			ref->obj.rotx += (i%2 == 0 ? 1 : -1) * 0.02 * M_PI;
+			ref->obj.roty += (i%3 == 0 ? 1 : -1) * 0.015 * M_PI;
+			ref->obj.rotz += (i%5 == 0 ? 1 : -1) * 0.01 * M_PI;
+			++i;
+			ref = rend3d_get_next_object(ref);
+		}
+		rend3d_cam_rotate(g.r3d, 0.007 * M_PI, 0.01 * M_PI, 0.005 * M_PI);
 	}
 	cleanup();
 	return 0;
