@@ -358,6 +358,40 @@ rend3d_add_object(struct rend3d *r, const struct r3d_obj *obj)
 }
 
 void
+rend3d_cam_get_pos(struct rend3d *r, double *camx, double *camy, double *camz)
+{
+	*camx = r->camx;
+	*camy = r->camy;
+	*camz = r->camz;
+}
+
+void
+rend3d_cam_set_pos(struct rend3d *r, double camx, double camy, double camz)
+{
+	r->camx = camx;
+	r->camy = camy;
+	r->camz = camz;
+}
+
+void
+rend3d_cam_set_pos_x(struct rend3d *r, double camx)
+{
+	r->camx = camx;
+}
+
+void
+rend3d_cam_set_pos_y(struct rend3d *r, double camy)
+{
+	r->camy = camy;
+}
+
+void
+rend3d_cam_set_pos_z(struct rend3d *r, double camz)
+{
+	r->camz = camz;
+}
+
+void
 rend3d_render(struct rend3d *r)
 {
 	double ar = (double) r->wpx / (double) r->hpx; // aspect ratio
