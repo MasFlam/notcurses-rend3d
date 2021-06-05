@@ -32,6 +32,8 @@ struct rend3d {
 	struct ncplane *drawp;
 	int w, h, wpx, hpx;
 	uint8_t *emptybuf, *drawbuf;
+	double camx, camy, camz;
+	double camrx, camry, camrz;
 	int objcount;
 	struct r3d_objref *objs;
 };
@@ -39,7 +41,7 @@ struct rend3d {
 static void draw_line(struct rend3d *r, double x0, double y0, double x1, double y1);
 static int drawp_resize_cb(struct ncplane *drawp);
 static inline double fpart(double x);
-static inline void render_obj(struct rend3d *r, const struct r3d_obj *o, const mat_t *projmat);
+static inline void render_obj(struct rend3d *r, const struct r3d_obj *o, const mat_t *projmat, const mat_t *viewmat);
 static inline double rfpart(double x);
 static inline void set_pixel(struct rend3d *r, int x, int y, double intensity);
 static inline void set_pixel_or_more(struct rend3d *r, int x, int y, double intensity);
@@ -130,7 +132,7 @@ fpart(double x)
 }
 
 void
-render_obj(struct rend3d *r, const struct r3d_obj *o, const mat_t *projmat)
+render_obj(struct rend3d *r, const struct r3d_obj *o, const mat_t *projmat, const mat_t *viewmat)
 {
 	// Prepare transformation matrices
 	mat_t obj_translation = {{
@@ -174,6 +176,7 @@ render_obj(struct rend3d *r, const struct r3d_obj *o, const mat_t *projmat)
 	// Combine transformations and projection into a single matrix
 	mat_t transformation_and_proj_mat = IDENTITY_MAT;
 	mul_mat_mat(projmat, &transformation_and_proj_mat, &transformation_and_proj_mat);
+	mul_mat_mat(viewmat, &transformation_and_proj_mat, &transformation_and_proj_mat);
 	mul_mat_mat(&obj_translation, &transformation_and_proj_mat, &transformation_and_proj_mat);
 	mul_mat_mat(&rotation_z, &transformation_and_proj_mat, &transformation_and_proj_mat);
 	mul_mat_mat(&rotation_y, &transformation_and_proj_mat, &transformation_and_proj_mat);
@@ -292,6 +295,8 @@ rend3d_create(struct ncplane *drawp, const struct rend3d_options *opts)
 	memcpy(&r->opts, opts, sizeof(struct rend3d_options));
 	r->nc = ncplane_notcurses(drawp);
 	r->drawp = drawp;
+	r->camx = r->camy = r->camz = 0;
+	r->camrx = r->camry = r->camrz = 0;
 	r->objcount = 0;
 	r->objs = NULL;
 	ncplane_set_userptr(drawp, r);
@@ -357,9 +362,9 @@ rend3d_render(struct rend3d *r)
 	case REND3D_PROJTYPE_ORTHO: {
 		projmat = (mat_t) {{
 			1/ar, 0, 0, 0,
-			0, 1, 0, 0,
-			0, 0, 1, 0,
-			0, 0, 0, 1,
+			0,    1, 0, 0,
+			0,    0, 1, 0,
+			0,    0, 0, 1,
 		}};
 	} break;
 	case REND3D_PROJTYPE_PERSP: {
@@ -368,16 +373,56 @@ rend3d_render(struct rend3d *r)
 		double fovx = r->opts.projopts.persp.fovx;
 		double fovy = r->opts.projopts.persp.fovy;
 		projmat = (mat_t) {{
-			1/(tan(fovx/2)*ar), 0, 0, 0,
-			0, 1/tan(fovy/2), 0, 0,
-			0, 0, -(far+near)/(far-near), -2*near*far/(far-near),
-			0, 0, -1, 0,
+			1/(tan(fovx/2)*ar), 0,              0,                      0,
+			0,                  1/tan(fovy/2),  0,                      0,
+			0,                  0,             -(far+near)/(far-near), -2*near*far/(far-near),
+			0,                  0,             -1,                      0,
 		}};
 	} break;
 	}
+	
+	// Prepare view matrix
+	mat_t viewmat_translation = {{
+		1, 0, 0, -r->camx,
+		0, 1, 0, -r->camy,
+		0, 0, 1, -r->camz,
+		0, 0, 0,  1,
+	}};
+	double s, c;
+	c = cos(-r->camrx);
+	s = sin(-r->camrx);
+	mat_t viewmat_rotx = {{
+		1, 0,  0, 0,
+		0, c, -s, 0,
+		0, s,  c, 0,
+		0, 0,  0, 1,
+	}};
+	c = cos(-r->camry);
+	s = sin(-r->camry);
+	mat_t viewmat_roty = {{
+		 c, 0, s, 0,
+		 0, 1, 0, 0,
+		-s, 0, c, 0,
+		 0, 0, 0, 1,
+	}};
+	c = cos(-r->camrz);
+	s = sin(-r->camrz);
+	mat_t viewmat_rotz = {{
+		c, -s, 0, 0,
+		s,  c, 0, 0,
+		0,  0, 1, 0,
+		0,  0, 0, 1,
+	}};
+	
+	mat_t viewmat = IDENTITY_MAT;
+	mul_mat_mat(&viewmat_rotx, &viewmat, &viewmat);
+	mul_mat_mat(&viewmat_roty, &viewmat, &viewmat);
+	mul_mat_mat(&viewmat_rotz, &viewmat, &viewmat);
+	mul_mat_mat(&viewmat_translation, &viewmat, &viewmat);
+	
 	struct r3d_objref *ref = r->objs;
 	while (ref) {
-		render_obj(r, &ref->obj, &projmat);
+		render_obj(r, &ref->obj, &projmat, &viewmat);
 		ref = ref->next;
 	}
 	struct ncvisual *ncv = ncvisual_from_rgba(r->drawbuf, r->hpx, r->wpx * 4, r->wpx);

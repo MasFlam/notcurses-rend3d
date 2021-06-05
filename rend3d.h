@@ -69,6 +69,12 @@ void rend3d_destroy(struct rend3d *r);
 
 struct r3d_objref *rend3d_add_object(struct rend3d *r, const struct r3d_obj *obj);
 
+void rend3d_cam_get_pos(struct rend3d *r, double *camx, double *camy, double *camz);
+void rend3d_cam_set_pos(struct rend3d *r, double camx, double camy, double camz);
+void rend3d_cam_set_pos_x(struct rend3d *r, double camx);
+void rend3d_cam_set_pos_y(struct rend3d *r, double camy);
+void rend3d_cam_set_pos_z(struct rend3d *r, double camz);
+
 void rend3d_render(struct rend3d *r);
 
 #endif
