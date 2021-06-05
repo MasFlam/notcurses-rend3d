@@ -183,6 +183,14 @@ render_obj(struct rend3d *r, const struct r3d_obj *o, const mat_t *projmat)
 	for (size_t i = 0; i < o->vertcount; ++i) {
 		vec_t v = { o->vertices[i].x, o->vertices[i].y, o->vertices[i].z, .w = 1 };
 		mul_mat_vec(&transformation_and_proj_mat, &v, &v);
+		
+		if (r->opts.projtype == REND3D_PROJTYPE_PERSP) {
+			// Clip on the Z axe
+			if (v.w < r->opts.projopts.persp.near) {
+				continue;
+			}
+		}
+		
 		v.x /= v.w;
 		v.y /= v.w;
 		v.z /= v.w;
@@ -195,12 +203,39 @@ render_obj(struct rend3d *r, const struct r3d_obj *o, const mat_t *projmat)
 	for (size_t i = 0; i < o->edgecount; ++i) {
 		vec_t v0 = { o->edges[i].a.x, o->edges[i].a.y, o->edges[i].a.z, .w = 1 };
 		mul_mat_vec(&transformation_and_proj_mat, &v0, &v0);
-		v0.x /= v0.w;
-		v0.y /= v0.w;
-		v0.z /= v0.w;
 		
 		vec_t v1 = { o->edges[i].b.x, o->edges[i].b.y, o->edges[i].b.z, .w = 1 };
 		mul_mat_vec(&transformation_and_proj_mat, &v1, &v1);
+		
+		if (r->opts.projtype == REND3D_PROJTYPE_PERSP) {
+			// Clip on the Z axe
+			double near = r->opts.projopts.persp.near;
+			double far = r->opts.projopts.persp.far;
+			if (v0.w >= near && v1.w >= near) {
+				// Render normally
+			} else if (v0.w < near && v1.w < near) {
+				continue;
+			} else if (v0.w >= near && v1.w < near) {
+				// https://stackoverflow.com/a/20180585/13694119
+				double n = (v0.w - near) / (v0.w - v1.w);
+				double xc = n * v0.x + (1-n) * v1.x;
+				double yc = n * v0.y + (1-n) * v1.y;
+				double zc = n * v0.z + (1-n) * v1.z;
+				double wc = near;
+				v1 = (vec_t) { xc, yc, zc, wc };
+			} else if (v0.w < near && v1.w >= near) {
+				double n = (v1.w - near) / (v1.w - v0.w);
+				double xc = n * v1.x + (1-n) * v0.x;
+				double yc = n * v1.y + (1-n) * v0.y;
+				double zc = n * v1.z + (1-n) * v0.z;
+				double wc = near;
+				v0 = (vec_t) { xc, yc, zc, wc };
+			}
+		}
+		
+		v0.x /= v0.w;
+		v0.y /= v0.w;
+		v0.z /= v0.w;
 		v1.x /= v1.w;
 		v1.y /= v1.w;
 		v1.z /= v1.w;
@@ -247,7 +282,7 @@ rend3d_create(struct ncplane *drawp, const struct rend3d_options *opts)
 		.projtype = REND3D_PROJTYPE_PERSP,
 		.projopts.persp.fovx = M_PI / 4,
 		.projopts.persp.fovy = M_PI / 4,
-		.projopts.persp.near = 0.1,
+		.projopts.persp.near = 0.01,
 		.projopts.persp.far = 1
 	};
 	if (!opts) {
