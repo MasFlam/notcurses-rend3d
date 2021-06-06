@@ -6,7 +6,7 @@ possible to draw without compromising on resolution.
 
 ![Demo 1 (gif)](https://masflam.com/static/rend3d-demo-1.gif)
 
-![Demo 2 (video)](https://masflam.com/static/rend3d-demo-2.mp4)
+[Demo 2 (video)](https://masflam.com/static/rend3d-demo-2.mp4)
 
 # Building
 Make sure Notcurses is installed (on Debian it's `libnotcurses-dev`). Then run `make`
