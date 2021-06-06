@@ -55,7 +55,13 @@ init()
 		.rows = termh,
 		.cols = termw
 	});
-	g.r3d = rend3d_create(drawp, NULL);
+	g.r3d = rend3d_create(drawp, &(struct rend3d_options) {
+		.projtype = REND3D_PROJTYPE_PERSP,
+		.projopts.persp.fovx = M_PI/4,
+		.projopts.persp.fovy = M_PI/4,
+		.projopts.persp.near = 0.01,
+		.projopts.persp.far = 1,
+	});
 }
 
 int

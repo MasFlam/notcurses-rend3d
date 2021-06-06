@@ -191,11 +191,19 @@ render_obj(struct rend3d *r, const struct r3d_obj *o, const mat_t *projmat, cons
 		vec_t v = { o->vertices[i].x, o->vertices[i].y, o->vertices[i].z, .w = 1 };
 		mul_mat_vec(&mvp_mat, &v, &v);
 		
-		if (r->opts.projtype == REND3D_PROJTYPE_PERSP) {
+		switch (r->opts.projtype) {
+		case REND3D_PROJTYPE_ORTHO: {
+			// Clip on the Z axe
+			if (v.z < r->opts.projopts.ortho.near) {
+				continue;
+			}
+		} break;
+		case REND3D_PROJTYPE_PERSP: {
 			// Clip on the Z axe
 			if (v.w < r->opts.projopts.persp.near) {
 				continue;
 			}
+		} break;
 		}
 		
 		v.x /= v.w;
@@ -214,7 +222,32 @@ render_obj(struct rend3d *r, const struct r3d_obj *o, const mat_t *projmat, cons
 		vec_t v1 = { o->edges[i].b.x, o->edges[i].b.y, o->edges[i].b.z, .w = 1 };
 		mul_mat_vec(&mvp_mat, &v1, &v1);
 		
-		if (r->opts.projtype == REND3D_PROJTYPE_PERSP) {
+		switch (r->opts.projtype) {
+		case REND3D_PROJTYPE_ORTHO: {
+			// Clip on the Z axe
+			double near = r->opts.projopts.ortho.near;
+			if (v0.z >= near && v1.z >= near) {
+				// Render normally
+			} else if (v0.z < near && v1.z < near) {
+				continue;
+			} else if (v0.z >= near && v1.z < near) {
+				// https://stackoverflow.com/a/20180585/13694119
+				double n = (v0.z - near) / (v0.z - v1.z);
+				double xc = n * v0.x + (1-n) * v1.x;
+				double yc = n * v0.y + (1-n) * v1.y;
+				double zc = near;
+				double wc = 1;
+				v1 = (vec_t) { xc, yc, zc, wc };
+			} else if (v0.z < near && v1.z >= near) {
+				double n = (v1.z - near) / (v1.z - v0.z);
+				double xc = n * v1.x + (1-n) * v0.x;
+				double yc = n * v1.y + (1-n) * v0.y;
+				double zc = near;
+				double wc = 1;
+				v0 = (vec_t) { xc, yc, zc, wc };
+			}
+		} break;
+		case REND3D_PROJTYPE_PERSP: {
 			// Clip on the Z axe
 			double near = r->opts.projopts.persp.near;
 			double far = r->opts.projopts.persp.far;
@@ -238,6 +271,7 @@ render_obj(struct rend3d *r, const struct r3d_obj *o, const mat_t *projmat, cons
 				double wc = near;
 				v0 = (vec_t) { xc, yc, zc, wc };
 			}
+		} break;
 		}
 		
 		v0.x /= v0.w;
@@ -469,10 +503,10 @@ rend3d_render(struct rend3d *r)
 	switch (r->opts.projtype) {
 	case REND3D_PROJTYPE_ORTHO: {
 		projmat = (mat_t) {{
-			1/ar, 0, 0, 0,
-			0,    1, 0, 0,
-			0,    0, 1, 0,
-			0,    0, 0, 1,
+			1/ar, 0,  0, 0,
+			0,    1,  0, 0,
+			0,    0, -1, 0,
+			0,    0,  0, 1,
 		}};
 	} break;
 	case REND3D_PROJTYPE_PERSP: {

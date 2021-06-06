@@ -31,6 +31,9 @@ struct rend3d_options {
 	enum rend3d_projtype projtype;
 	union {
 		struct {
+			double near;
+		} ortho;
+		struct {
 			double fovx, fovy;
 			double near, far;
 		} persp;
