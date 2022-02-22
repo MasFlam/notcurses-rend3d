@@ -111,7 +111,7 @@ drawp_resize_cb(struct ncplane *drawp)
 {
 	struct rend3d *r = ncplane_userptr(drawp);
 	ncplane_resize_maximize(drawp);
-	ncplane_pixelgeom(drawp, NULL, NULL, NULL, NULL, &r->hpx, &r->wpx);
+	ncplane_pixel_geom(drawp, NULL, NULL, NULL, NULL, &r->hpx, &r->wpx);
 	ncplane_dim_yx(drawp, &r->h, &r->w);
 	r->emptybuf = realloc(r->emptybuf, r->wpx * r->hpx * 4);
 	r->drawbuf = realloc(r->drawbuf, r->wpx * r->hpx * 4);
@@ -339,7 +339,7 @@ rend3d_create(struct ncplane *drawp, const struct rend3d_options *opts)
 	r->objs = NULL;
 	ncplane_set_userptr(drawp, r);
 	ncplane_dim_yx(drawp, &r->h, &r->w);
-	ncplane_pixelgeom(r->drawp, NULL, NULL, NULL, NULL, &r->hpx, &r->wpx);
+	ncplane_pixel_geom(r->drawp, NULL, NULL, NULL, NULL, &r->hpx, &r->wpx);
 	ncplane_set_resizecb(r->drawp, drawp_resize_cb);
 	uint8_t *buf = malloc(r->wpx * r->hpx * 4);
 	for (int i = 0; i < r->wpx * r->hpx; ++i) {
@@ -570,7 +570,7 @@ rend3d_render(struct rend3d *r)
 	}
 	
 	struct ncvisual *ncv = ncvisual_from_rgba(r->drawbuf, r->hpx, r->wpx * 4, r->wpx);
-	ncvisual_render(r->nc, ncv, &(struct ncvisual_options) {
+	ncvisual_blit(r->nc, ncv, &(struct ncvisual_options) {
 		.n = r->drawp,
 		.x = 0, .y = 0,
 		.scaling = NCSCALE_NONE,
